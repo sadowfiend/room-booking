@@ -50,3 +50,24 @@ export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
 };
 
 export const SLOT_BUSY_MESSAGE = "Это время занято";
+
+/** Short labels appended to disabled time options, e.g. "10:15 — занято". */
+export const SLOT_REASON_LABELS = {
+  BUSY: "занято",
+  PAST: "прошло",
+} as const;
+
+/** Short reasons an end time option is unavailable, derived from validateBooking codes. */
+export const END_REASON_LABELS: Partial<Record<ValidationCode, string>> = {
+  OFF_STEP: "не по шагу",
+  OUTSIDE_WORKING_HOURS: "вне рабочего времени",
+  START_NOT_BEFORE_END: "раньше начала",
+  TOO_SHORT: "слишком коротко",
+  TOO_LONG: "слишком долго",
+  END_IN_PAST: "прошло",
+  START_IN_PAST: "прошло",
+  PAST_DATE: "прошло",
+  BOOKING_FINISHED: "завершена",
+};
+
+export const TIME_HINT_MESSAGE = `Рабочее время ${WORKDAY_START}–${WORKDAY_END}, шаг ${SLOT_STEP_MINUTES} мин, длительность ${MIN_DURATION_MINUTES}–${MAX_DURATION_MINUTES} мин`;
