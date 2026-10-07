@@ -13,3 +13,5 @@
 | 2026-10-07 | 2.1 | implementer → test-writer | sonnet | | ~15k + ~20k токенов (% — после следующего замера); на 21:54: сессия 16%, неделя 7% | Клиент API и ошибки, 33 теста; коммит feat(api-client), 141 тест |
 | 2026-10-07 | 15-минутный шаг (A) | implementer → test-writer | sonnet | | ~11k + ~19k токенов; % на 22:02 — не указан | `SLOT_STEP_MINUTES = 15`, тесты под 37/36; коммит feat(domain): 15-minute step, 143 теста |
 | 2026-10-07 | План 3C, async-репозиторий, select (B–D) | основная сессия | opus | | % на 22:02 — не указан | PLAN.md/SPEC.md: Redis как 3C, CAS по версии, список env, компромисс ложного 409 |
+| 2026-10-07 | 3A | implementer → test-writer | sonnet | | ~28k + ~42k токенов; % — не указан | Репозиторий (async, in-memory), сервис, http, route handlers; 125 тестов сервера; коммит feat(server), 268 тестов |
+| 2026-10-07 | 3C | implementer → test-writer | sonnet | | ~40k + ~40k токенов; % — не указан | `@upstash/redis`, CAS по версии (Lua), фабрика по списку env, `/api/health`; 343 теста + 22 на реальном Redis (skip без `REDIS_TEST=1`); `.env.example` не обновлён — закрыт правами |
