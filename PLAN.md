@@ -218,6 +218,69 @@
 - Ручной прогон по чек-листу на `npm run dev`.
 - Готово: `npm run typecheck && npm run lint && npm test && npm run build` зелёные, чек-лист пройден.
 
+## Фаза 4.5. Редизайн UI (ветка `feat/design`, направление A «Спокойные карточки»)
+Только слой представления: `src/features/booking/**`, `src/app/globals.css`, `src/app/layout.tsx`.
+`src/domain`, `src/lib/api`, `src/server` не трогать; новых зависимостей нет (только Tailwind v4, иконки — inline SVG).
+Каждый этап: implementer → test-writer → проверка → `git diff --stat` → коммит только после ок пользователя.
+
+**Решения:** одна колонка (`max-w-2xl`), на 360px так же; тёмная тема только по `prefers-color-scheme`, без переключателя;
+`addDays` — в `src/features/booking/lib/date.ts` (домен не трогаем); полоса дня декоративная (`aria-hidden`),
+без подстановки времени по клику; выбор времени — по-прежнему два нативных `<select>`.
+
+**Чек-лист, который фиксируют тесты (сохранить в обоих этапах):**
+- Поле с подписью ровно «Дата» (`input[type=date]`); у кнопок даты имя не «Дата».
+- Во время загрузки единственный `[aria-busy="true"]` — скелетон; после загрузки `aria-busy="true"` нет нигде.
+- Название брони и метки «прошла» / «идёт» встречаются в DOM ровно один раз на бронь (в полосе дня — ни текста, ни `title`, ни `sr-only`).
+- Пустое состояние: текст «На эту дату бронирований нет» в своём элементе, ни одного `role=list` на странице
+  (кнопки даты и полоса — не списки; иллюстрация — inline SVG `aria-hidden`, без `role`).
+- `<ul aria-label="Бронирования на выбранную дату">` уникален, `li` отсортированы по `start`.
+- Кнопки «Изменить бронь HH:MM–HH:MM», «Удалить бронь HH:MM–HH:MM», «Новая бронь», «Забронировать», «Сохранить»,
+  «Отмена», «Удалить», «Повторить»; в процессе «Отправка…» / «Удаление…» — имена не менять.
+- Ровно один `role=status` и один `role=alert` в момент проверки; новых live-регионов (тостов) не добавлять.
+- Форма: `role=form` с `aria-label`, `aria-busy` при отправке; подписи «Начало», «Окончание», «Название (необязательно)».
+- `<select>`: первая опция «Выберите время»; недоступные — «HH:MM — прошло / занято / …» с `disabled`;
+  подсказка в `aria-describedby`; `aria-invalid` сохраняется.
+- Подтверждение удаления — `role=group` (не `<dialog>` / `alertdialog`), с текстом интервала.
+- Переключатель разработчика — чекбокс с прежней подписью, скрыт без env.
+
+**Этап 1. Оформление** (коммит `feat(ui): design tokens, cards, skeleton and empty state`)
+- Файлы: `src/app/globals.css` — семантические переменные (`--surface`, `--surface-muted`, `--border`, `--text`,
+  `--text-muted`, `--accent`, `--busy`, `--past`, `--ongoing`, `--selected`, `--danger`, `--focus`) в `:root`,
+  переопределение в `@media (prefers-color-scheme: dark)`, проброс в `@theme inline` (классы `bg-surface`, `text-muted` …),
+  системный шрифтовой стек с кириллицей; `src/app/layout.tsx` — `lang="ru"`, `metadata` «Бронирование переговорной»,
+  убрать Geist (без сетевых шрифтов); `components/icons.tsx` (новый, inline SVG `aria-hidden`);
+  `components/BookingList.tsx` (карточки: цветная полоса статуса, плашки «идёт» / «прошла», кнопки с иконкой и текстом),
+  `BookingPage.tsx` (оболочка, скелетон в форме карточек с `motion-safe:animate-pulse`, пустое состояние с иллюстрацией),
+  `components/BookingForm.tsx`, `components/TimeSlotPicker.tsx`, `components/StatusBanner.tsx`,
+  `components/DeleteConfirm.tsx`, `components/DevConflictToggle.tsx` — только классы.
+- Правила: в `src/features` нет «сырых» палитр (`zinc-`, `blue-`, `red-` …) — только токены; статус не передаётся
+  только цветом; контраст текста ≥ 4.5:1, границ и фокуса ≥ 3:1 в обеих темах; видимый `focus-visible`.
+  DOM-структура, роли, имена и тексты из чек-листа не меняются.
+- Тесты (test-writer): иллюстрация пустого состояния `aria-hidden` и без `role`; скелетон — единственный `aria-busy="true"`
+  и не анимируется при `prefers-reduced-motion` (класс `motion-safe:`); `html[lang="ru"]` не проверять (layout вне jsdom).
+- Проверка: `npm run typecheck && npm run lint && npm test && npm run build`.
+
+**Этап 2. Навигация и фокус** (коммит `feat(ui): date shortcuts, day strip and focus management`)
+- Файлы: `src/features/booking/lib/date.ts` (новый, `addDays(date: DateString, delta: number): DateString`, чистая,
+  UTC-арифметика), `components/DatePicker.tsx` (кнопки «‹» с `aria-label="Предыдущий день"`, «Сегодня», «Завтра»,
+  «›» с `aria-label="Следующий день"`; проп `today: DateString | null`, пока `null` — кнопки `disabled`; не список),
+  `components/DayStrip.tsx` (новый: `{ bookings, date, now: ZonedNow | null }`; `aria-hidden`, ни текста, ни `title`;
+  позиции через `toMinutes` и `WORKDAY_START/END`; прошлое и линия «сейчас» только при `date === now.date`),
+  `components/DeleteConfirm.tsx` (фокус на «Отмена» при открытии; Esc → отмена; после отмены фокус на кнопку
+  «Удалить бронь …», которая открыла подтверждение), `components/BookingForm.tsx` (проп `onConflict?: (c: Booking[]) => void`,
+  вызывается при 409 вместе с прежним поведением), `components/BookingList.tsx` (проп `highlightIds?: string[]`,
+  у подсвеченных `li` — `data-conflict="true"` и рамка `--danger`), `BookingPage.tsx` (кнопки даты, полоса,
+  после успешного сохранения и удаления — фокус на «Новая бронь»; подсветка конфликтов сбрасывается при закрытии формы
+  и смене даты).
+- Правила: фокус на баннер 409 сохраняется и не перебивается; фокус после сохранения ставится только после закрытия формы;
+  `now` по-прежнему из `useNow` (эффект), не в рендере.
+- Тесты (test-writer): `addDays` — конец месяца, 2028-02-29, конец года, отрицательный шаг; `DatePicker` — имена кнопок,
+  `disabled` при `today === null`, переданные даты; `DayStrip` — `aria-hidden`, пустой `textContent`, нет `title`,
+  отрезков столько же, сколько броней, линия «сейчас» только для сегодняшней даты; `DeleteConfirm` — фокус на «Отмена»,
+  Esc вызывает отмену, возврат фокуса; `BookingPage` — после сохранения фокус на «Новая бронь»; при 409 конфликтующие
+  карточки с `data-conflict="true"`, фокус на баннере, по-прежнему один `role=alert`.
+- Проверка: `npm run typecheck && npm run lint && npm test`.
+
 ## Фаза 5. Ревью (reviewer, opus, чистый контекст, один раз)
 - Вход: `git diff <коммит фазы 0>..HEAD`, `SPEC.md`, `PLAN.md`.
 - Фокус: расхождения с ТЗ, дублирование правил, `fetch` в UI, потеря ввода, a11y, гонки.
