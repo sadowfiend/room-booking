@@ -1,7 +1,7 @@
 # Работа с AI: сессии реализации
 
-Сжатая хронология сессий реализации. Источники: `session-5-full.md` (`feat/server`), `session-7-full.md` (`feat/ui`),
-`session-6-full.md` (интеграция в `main`). Время — UTC по логам. Расход — в `docs/ai-usage.md`.
+Сжатая хронология сессий реализации. Источники: `raw/session-5-full.md` (`feat/server`), `raw/session-7-full.md` (`feat/ui`),
+`raw/session-6-full.md` (интеграция в `main`). Время — UTC по логам. Расход — в `docs/ai-usage.md`.
 Каждая ветка работала в своём worktree и в своей сессии Claude Code (Opus). Код писал `implementer` (Sonnet),
 тесты — `test-writer` (Sonnet). Промпты для обеих сессий подготовила основная сессия.
 
