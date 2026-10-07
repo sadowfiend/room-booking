@@ -2,15 +2,28 @@
 
 import { useState } from "react";
 import { API_ERROR_MESSAGES } from "@/domain/booking/messages";
-import type { DateString } from "@/domain/booking/types";
+import { VALIDATION_MESSAGES } from "@/domain/booking/messages";
+import type { Booking, DateString } from "@/domain/booking/types";
 import { bookingsApi, type BookingsApi } from "@/lib/api/bookings";
+import { BookingForm } from "./components/BookingForm";
 import { BookingList } from "./components/BookingList";
 import { DatePicker } from "./components/DatePicker";
+import { DeleteConfirm } from "./components/DeleteConfirm";
 import { StatusBanner } from "./components/StatusBanner";
 import { useBookings } from "./hooks/useBookings";
 import { useNow } from "./hooks/useNow";
 
 type Props = { api?: BookingsApi };
+
+type Panel =
+  | { kind: "create" }
+  | { kind: "edit"; booking: Booking }
+  | { kind: "delete"; booking: Booking };
+
+type Notice = { variant: "info" | "error"; message: string };
+
+const addButtonClass =
+  "self-start rounded-md bg-blue-700 px-4 py-2 font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-60";
 
 function ListSkeleton() {
   return (
@@ -27,6 +40,14 @@ export function BookingPage({ api = bookingsApi }: Props) {
   // Until the user picks a date, follow today in the room time zone.
   const [picked, setPicked] = useState<DateString | null>(null);
   const date = picked ?? now?.date ?? null;
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+
+  const changeDate = (next: DateString) => {
+    setPicked(next);
+    setPanel(null);
+    setNotice(null);
+  };
 
   const { bookings, isLoading, isRefreshing, error, reload } = useBookings(
     date,
@@ -39,7 +60,11 @@ export function BookingPage({ api = bookingsApi }: Props) {
         Бронирование переговорной
       </h1>
 
-      {date ? <DatePicker value={date} onChange={setPicked} /> : null}
+      {date ? <DatePicker value={date} onChange={changeDate} /> : null}
+
+      {notice ? (
+        <StatusBanner variant={notice.variant} message={notice.message} />
+      ) : null}
 
       {error ? (
         <StatusBanner
@@ -48,6 +73,85 @@ export function BookingPage({ api = bookingsApi }: Props) {
           actionLabel="Повторить"
           onAction={reload}
         />
+      ) : null}
+
+      {date && now ? (
+        <div className="flex flex-col gap-3">
+          {panel === null ? (
+            date < now.date ? (
+              <div className="flex flex-col gap-1">
+                <button type="button" disabled className={addButtonClass}>
+                  Новая бронь
+                </button>
+                <p className="text-sm text-zinc-600">
+                  {VALIDATION_MESSAGES.PAST_DATE}
+                </p>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={bookings === null}
+                onClick={() => {
+                  setNotice(null);
+                  setPanel({ kind: "create" });
+                }}
+                className={addButtonClass}
+              >
+                Новая бронь
+              </button>
+            )
+          ) : null}
+
+          {panel?.kind === "create" || panel?.kind === "edit" ? (
+            <BookingForm
+              key={panel.kind === "edit" ? panel.booking.id : "create"}
+              api={api}
+              date={date}
+              existing={bookings ?? []}
+              now={now}
+              original={panel.kind === "edit" ? panel.booking : undefined}
+              reload={reload}
+              onCancel={() => setPanel(null)}
+              onSaved={(_, mode) => {
+                setPanel(null);
+                setNotice({
+                  variant: "info",
+                  message: mode === "edit" ? "Бронь обновлена" : "Бронь создана",
+                });
+                reload();
+              }}
+              onNotFound={() => {
+                setPanel(null);
+                setNotice({
+                  variant: "error",
+                  message: API_ERROR_MESSAGES.NOT_FOUND,
+                });
+              }}
+            />
+          ) : null}
+
+          {panel?.kind === "delete" ? (
+            <DeleteConfirm
+              key={panel.booking.id}
+              api={api}
+              booking={panel.booking}
+              onCancel={() => setPanel(null)}
+              onDeleted={() => {
+                setPanel(null);
+                setNotice({ variant: "info", message: "Бронь удалена" });
+                reload();
+              }}
+              onNotFound={() => {
+                setPanel(null);
+                setNotice({
+                  variant: "error",
+                  message: API_ERROR_MESSAGES.NOT_FOUND,
+                });
+                reload();
+              }}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       <section aria-label="Список бронирований" className="flex flex-col gap-3">
@@ -65,7 +169,19 @@ export function BookingPage({ api = bookingsApi }: Props) {
               На эту дату бронирований нет
             </p>
           ) : (
-            <BookingList bookings={bookings} date={date} now={now} />
+            <BookingList
+              bookings={bookings}
+              date={date}
+              now={now}
+              onEdit={(b) => {
+                setNotice(null);
+                setPanel({ kind: "edit", booking: b });
+              }}
+              onDelete={(b) => {
+                setNotice(null);
+                setPanel({ kind: "delete", booking: b });
+              }}
+            />
           )
         ) : null}
       </section>

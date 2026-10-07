@@ -1,10 +1,12 @@
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 
 type Props = {
   variant: "error" | "info";
   message: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** Extra content under the message, e.g. a list of conflicting bookings. */
+  children?: ReactNode;
   /** Lets the parent move focus to the banner (it is focusable programmatically). */
   ref?: Ref<HTMLDivElement>;
 };
@@ -14,6 +16,7 @@ export function StatusBanner({
   message,
   actionLabel,
   onAction,
+  children,
   ref,
 }: Props) {
   const isError = variant === "error";
@@ -29,7 +32,10 @@ export function StatusBanner({
           : "border-blue-200 bg-blue-50 text-blue-900"
       }`}
     >
-      <p>{message}</p>
+      <div className="flex flex-col gap-2">
+        <p>{message}</p>
+        {children}
+      </div>
       {actionLabel && onAction ? (
         <button
           type="button"

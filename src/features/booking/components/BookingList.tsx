@@ -7,6 +7,9 @@ type Props = {
   date: DateString;
   /** `null` until the client clock is known: no status labels then. */
   now: ZonedNow | null;
+  /** Edit/delete actions are offered only for bookings that are not finished. */
+  onEdit?: (booking: Booking) => void;
+  onDelete?: (booking: Booking) => void;
 };
 
 type Status = "past" | "ongoing" | null;
@@ -25,7 +28,10 @@ const STATUS_LABEL: Record<Exclude<Status, null>, string> = {
   ongoing: "идёт",
 };
 
-export function BookingList({ bookings, date, now }: Props) {
+const actionClass =
+  "rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600";
+
+export function BookingList({ bookings, date, now, onEdit, onDelete }: Props) {
   const sorted = [...bookings].sort(
     (a, b) => toMinutes(a.start) - toMinutes(b.start),
   );
@@ -48,17 +54,39 @@ export function BookingList({ bookings, date, now }: Props) {
                 <time>{b.end}</time>
               </p>
             </div>
-            {status ? (
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  status === "ongoing"
-                    ? "bg-green-100 text-green-800"
-                    : "bg-zinc-100 text-zinc-600"
-                }`}
-              >
-                {STATUS_LABEL[status]}
-              </span>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {status ? (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    status === "ongoing"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-zinc-100 text-zinc-600"
+                  }`}
+                >
+                  {STATUS_LABEL[status]}
+                </span>
+              ) : null}
+              {now && status !== "past" && onEdit ? (
+                <button
+                  type="button"
+                  onClick={() => onEdit(b)}
+                  aria-label={`Изменить бронь ${b.start}–${b.end}`}
+                  className={actionClass}
+                >
+                  Изменить
+                </button>
+              ) : null}
+              {now && status !== "past" && onDelete ? (
+                <button
+                  type="button"
+                  onClick={() => onDelete(b)}
+                  aria-label={`Удалить бронь ${b.start}–${b.end}`}
+                  className={actionClass}
+                >
+                  Удалить
+                </button>
+              ) : null}
+            </div>
           </li>
         );
       })}
