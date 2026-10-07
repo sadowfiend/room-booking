@@ -27,6 +27,21 @@ export function DeleteConfirm({
   const [error, setError] = useState<ApiError | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  // Remember the control that opened the confirmation, then move focus to "Отмена".
+  useEffect(() => {
+    const active = document.activeElement;
+    openerRef.current = active instanceof HTMLElement ? active : null;
+    cancelRef.current?.focus();
+  }, []);
+
+  function cancel() {
+    const opener = openerRef.current;
+    onCancel();
+    if (opener?.isConnected) opener.focus();
+  }
 
   useEffect(() => () => controllerRef.current?.abort(), []);
   useEffect(() => {
@@ -61,6 +76,12 @@ export function DeleteConfirm({
       role="group"
       aria-label="Подтверждение удаления"
       aria-busy={deleting}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          cancel();
+        }
+      }}
       className="flex flex-col gap-3 rounded-xl border border-danger bg-danger-soft p-4"
     >
       <p className="text-sm text-text">
@@ -83,8 +104,9 @@ export function DeleteConfirm({
           {deleting ? "Удаление…" : "Удалить"}
         </button>
         <button
+          ref={cancelRef}
           type="button"
-          onClick={onCancel}
+          onClick={cancel}
           className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 font-medium text-text hover:bg-surface-muted active:scale-[0.98] active:bg-surface-muted disabled:opacity-60"
         >
           Отмена

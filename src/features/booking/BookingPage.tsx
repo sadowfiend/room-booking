@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { API_ERROR_MESSAGES } from "@/domain/booking/messages";
 import { VALIDATION_MESSAGES } from "@/domain/booking/messages";
 import type { Booking, DateString } from "@/domain/booking/types";
@@ -8,6 +8,7 @@ import { bookingsApi, type BookingsApi } from "@/lib/api/bookings";
 import { BookingForm } from "./components/BookingForm";
 import { BookingList } from "./components/BookingList";
 import { DatePicker } from "./components/DatePicker";
+import { DayStrip } from "./components/DayStrip";
 import { DeleteConfirm } from "./components/DeleteConfirm";
 import { StatusBanner } from "./components/StatusBanner";
 import { useBookings } from "./hooks/useBookings";
@@ -50,9 +51,20 @@ export function BookingPage({ api = bookingsApi }: Props) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
+  const [conflictIds, setConflictIds] = useState<string[]>([]);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  // Set after a successful save/delete; consumed once the panel is closed and the button is rendered.
+  const focusAddPending = useRef(false);
+
+  // Conflict highlight lives only while the form that caused it is open.
+  const closePanel = () => {
+    setPanel(null);
+    setConflictIds([]);
+  };
+
   const changeDate = (next: DateString) => {
     setPicked(next);
-    setPanel(null);
+    closePanel();
     setNotice(null);
   };
 
@@ -61,13 +73,32 @@ export function BookingPage({ api = bookingsApi }: Props) {
     { api },
   );
 
+  useEffect(() => {
+    if (!focusAddPending.current || panel !== null) return;
+    const button = addButtonRef.current;
+    if (button && !button.disabled) {
+      button.focus();
+      focusAddPending.current = false;
+    }
+  }, [panel, bookings]);
+
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 pt-[max(1.5rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(5.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] sm:py-8 sm:pb-8">
       <h1 className="text-2xl font-semibold text-text">
         Бронирование переговорной
       </h1>
 
-      {date ? <DatePicker value={date} onChange={changeDate} /> : null}
+      {date ? (
+        <DatePicker
+          value={date}
+          onChange={changeDate}
+          today={now?.date ?? null}
+        />
+      ) : null}
+
+      {date && bookings ? (
+        <DayStrip bookings={bookings} date={date} now={now} />
+      ) : null}
 
       {notice ? (
         <StatusBanner variant={notice.variant} message={notice.message} />
@@ -97,10 +128,12 @@ export function BookingPage({ api = bookingsApi }: Props) {
               </div>
             ) : (
               <button
+                ref={addButtonRef}
                 type="button"
                 disabled={bookings === null}
                 onClick={() => {
                   setNotice(null);
+                  setConflictIds([]);
                   setPanel({ kind: "create" });
                 }}
                 className={addButtonClass}
@@ -120,9 +153,11 @@ export function BookingPage({ api = bookingsApi }: Props) {
               now={now}
               original={panel.kind === "edit" ? panel.booking : undefined}
               reload={reload}
-              onCancel={() => setPanel(null)}
+              onCancel={closePanel}
+              onConflict={(c) => setConflictIds(c.map((b) => b.id))}
               onSaved={(_, mode) => {
-                setPanel(null);
+                focusAddPending.current = true;
+                closePanel();
                 setNotice({
                   variant: "info",
                   message: mode === "edit" ? "Бронь обновлена" : "Бронь создана",
@@ -130,7 +165,7 @@ export function BookingPage({ api = bookingsApi }: Props) {
                 reload();
               }}
               onNotFound={() => {
-                setPanel(null);
+                closePanel();
                 setNotice({
                   variant: "error",
                   message: API_ERROR_MESSAGES.NOT_FOUND,
@@ -144,14 +179,15 @@ export function BookingPage({ api = bookingsApi }: Props) {
               key={panel.booking.id}
               api={api}
               booking={panel.booking}
-              onCancel={() => setPanel(null)}
+              onCancel={closePanel}
               onDeleted={() => {
-                setPanel(null);
+                focusAddPending.current = true;
+                closePanel();
                 setNotice({ variant: "info", message: "Бронь удалена" });
                 reload();
               }}
               onNotFound={() => {
-                setPanel(null);
+                closePanel();
                 setNotice({
                   variant: "error",
                   message: API_ERROR_MESSAGES.NOT_FOUND,
@@ -185,12 +221,15 @@ export function BookingPage({ api = bookingsApi }: Props) {
               bookings={bookings}
               date={date}
               now={now}
+              highlightIds={conflictIds}
               onEdit={(b) => {
                 setNotice(null);
+                setConflictIds([]);
                 setPanel({ kind: "edit", booking: b });
               }}
               onDelete={(b) => {
                 setNotice(null);
+                setConflictIds([]);
                 setPanel({ kind: "delete", booking: b });
               }}
             />

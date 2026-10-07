@@ -41,6 +41,8 @@ type Props = {
   /** Refreshes the list (called after a 409). */
   reload: () => void;
   onCancel: () => void;
+  /** Called with the conflicting bookings on a 409, in addition to the banner. */
+  onConflict?: (conflicts: Booking[]) => void;
   onSaved: (booking: Booking, mode: "create" | "edit") => void;
   /** 404 on update: the booking no longer exists. */
   onNotFound: () => void;
@@ -60,6 +62,7 @@ export function BookingForm({
   original,
   reload,
   onCancel,
+  onConflict,
   onSaved,
   onNotFound,
 }: Props) {
@@ -143,6 +146,7 @@ export function BookingForm({
         onNotFound();
       } else if (err instanceof ConflictError) {
         setBanner({ code: "CONFLICT", conflicts: err.conflicts });
+        onConflict?.(err.conflicts);
         reload();
       } else if (err instanceof ValidationError) {
         setServerIssues(err.issues);
