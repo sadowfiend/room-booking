@@ -1,0 +1,164 @@
+# PLAN — Room Booking
+
+## Решения (зафиксировано)
+- Слои: `src/domain` (чистые правила) → `src/server` (repository + service) → `src/app/api` (тонкие handlers);
+  `src/lib/api` (клиент, типизированные ошибки) → `src/features/booking` (UI).
+- Часовой пояс комнаты: `Asia/Bishkek`, переопределение через `NEXT_PUBLIC_ROOM_TZ`.
+- Рабочий день 09:00–18:00, шаг 30 мин, длительность 30–120 мин — одна конфигурация в `src/domain/booking/config.ts`.
+- Прошлое: слот доступен, если `start >= now` (в TZ комнаты). Без округления.
+- Интервалы полуоткрытые `[start, end)`: касание границ не конфликт.
+- Прошедшие брони (`end <= now`) — только просмотр. Идущие — редактирование и удаление разрешены:
+  `start` можно оставить исходным, новый `start >= now`, `end > now`.
+- Хранилище: in-memory за `BookingRepository`. Redis — опциональная фаза 7.
+- Новых зависимостей нет: ни zod, ни TanStack Query (обоснование — в README).
+- Демонстрация 409: заголовок `x-mock-force-conflict` принимается сервером только при `MOCK_ALLOW_FORCED_CONFLICT=1`;
+  переключатель в UI с подписью «Инструмент разработчика» виден только при `NEXT_PUBLIC_DEV_TOOLS=1`.
+
+### Контракт ошибок API
+Единое тело ошибки: `{ code, message, errors?, conflicts? }`.
+
+| Статус | code | Когда | Доп. поля |
+|---|---|---|---|
+| 400 | `BAD_REQUEST` | битый JSON, неверный Content-Type | — |
+| 422 | `VALIDATION` | любая ошибка данных: формат и бизнес-правила | `errors: { field?, code }[]` |
+| 409 | `CONFLICT` | пересечение с другой бронью (в т.ч. форсированное) | `conflicts: Booking[]` |
+| 404 | `NOT_FOUND` | бронь не найдена | — |
+
+Коды в `errors` — те же, что возвращает доменный `validateBooking` / `parseBookingInput`.
+
+## Open questions
+- Редактирование и удаление идущих броней (сейчас: разрешены, с правилом выше). Это допущение, в ТЗ его нет.
+- Выходные и горизонт бронирования (сейчас: без ограничений).
+- Перенос брони на другую дату через PATCH (сейчас: разрешён).
+
+## Процесс
+- Общая проверка после каждой задачи: `npm run typecheck && npm run lint && npm test`.
+  `npm run build` — в конце фаз 4 и 6.
+- Коммит после каждой фазы, только при зелёных проверках, после показа `git diff --stat`.
+  Формат сообщения: `feat(domain): ...`, `feat(server): ...`, `chore(setup): ...` и т.п.
+- После каждой фазы — строка в `docs/ai-usage.md` (фаза, агент, модель, значение `/cost`, результат).
+
+---
+
+## Фаза 0. Подготовка (последовательно, основная сессия)
+**0.1 Инфраструктура тестов**
+- Файлы: `vitest.config.mts`, `vitest.setup.ts`, `src/smoke.test.tsx` (удаляется в фазе 1), `.nvmrc` (22), `engines` в `package.json`.
+- Готово: vitest запускается; по умолчанию окружение node, UI-тесты включают jsdom через `// @vitest-environment jsdom`;
+  jest-dom подключён; alias `@/*` работает.
+- Проверка: `npm test && npm run typecheck`
+
+**0.2 Документы и агенты**
+- Файлы: `PLAN.md`, `CLAUDE.md`, `SPEC.md` (Open questions), `.claude/agents/*.md`, `.claude/settings.json`, `docs/ai-usage.md`.
+- Готово: агенты видны в `/agents`; в settings разрешены команды проверки и read-only git.
+- Проверка: ручная.
+
+## Фаза 1. Домен (последовательно: implementer → test-writer)
+**1.1 Конфиг, типы, время**
+- Файлы: `src/domain/booking/config.ts`, `types.ts`, `time.ts`
+- `Booking`, `BookingInput`, `ValidationCode` (union); `toMinutes`/`fromMinutes`;
+  `getNowInZone(tz, instant)` → `{ date: YYYY-MM-DD, minutes }`; `generateSlots()`.
+- Готово: все функции чистые, `now` передаётся параметром, `Date.now()` внутри домена не вызывается.
+
+**1.2 Правила**
+- Файлы: `src/domain/booking/rules.ts`, `parse.ts`, `availability.ts`, `messages.ts`
+- `validateBooking(input, { existing, now, original? })` → `ValidationIssue[]` (`{ field?, code }`).
+- `findConflicts(input, existing, excludeId?)`.
+- `parseBookingInput(unknown)` → `Result<BookingInput, ValidationIssue[]>`.
+- `getSlotAvailability(date, { existing, now, original? })` → слоты начала/конца с причиной недоступности (`code`).
+  Используется формой, чтобы UI не реализовывал правила повторно.
+- `messages.ts`: код → русский текст. Единственное место с текстами ошибок.
+- Готово: правила 1–7 из SPEC и правило про идущие брони реализованы.
+
+**1.3 Тесты домена** (test-writer, по SPEC и контракту, не по реализации)
+- Файлы: `src/domain/booking/*.test.ts`; удалить `src/smoke.test.tsx`.
+- Обязательные случаи: 09:00/18:00 на границах; ровно 30 и 120 мин; 29/31 → не по шагу, 150 → больше максимума;
+  касание 10–11 и 11–12; вложенный и перекрывающий интервал; исключение текущей брони при редактировании;
+  прошедшая дата; сегодня `start == now` и `start < now`; идущая бронь (сохранить `start` / сдвинуть `start` в прошлое /
+  `end <= now`); мусор в `parseBookingInput`; `getSlotAvailability` с причинами.
+- Проверка: `npm test -- src/domain`
+
+## Фаза 2. Контракт API (последовательно, implementer)
+**2.1 Клиент и ошибки**
+- Файлы: `src/lib/api/errors.ts` (`ApiError`, `BadRequestError`, `ValidationError`, `ConflictError`, `NotFoundError`, `NetworkError`),
+  `src/lib/api/contract.ts` (типы тел ответов и ошибок), `src/lib/api/bookings.ts` (`list/create/update/remove`,
+  `baseUrl`, `signal`, опция `forceConflict`), `src/lib/api/*.test.ts`.
+- Готово: UI не видит `fetch` и HTTP-статусы; каждый статус соответствует своему классу ошибки.
+- Проверка: `npm test -- src/lib/api` (fetch замокан).
+- Коммит — точка ветвления для фазы 3.
+
+## Фаза 3. Сервер и UI
+Параллельно только 3A и 3B-1, каждый в своём worktree. 3B-2 стартует после завершения 3B-1, в той же ветке `feat/ui`.
+
+**3A. Сервер** (implementer, ветка `feat/server`)
+- Файлы: `src/server/repository.ts` (интерфейс), `src/server/memory-repository.ts` (синглтон на `globalThis`),
+  `src/server/booking-service.ts` (parse → validate → синхронные check+write, 404, форсированный конфликт),
+  `src/server/http.ts` (ошибки сервиса → `Response`), `src/app/api/bookings/route.ts` (GET, POST),
+  `src/app/api/bookings/[id]/route.ts` (PATCH, DELETE), `src/server/*.test.ts`.
+- Правила: handlers не длиннее ~20 строк; `params` в Next 16 — Promise; без `export const dynamic` (включён `cacheComponents`).
+- Свежесть GET: первой строкой `await connection()` (из `next/server`), явно отключает пререндер;
+  все ответы API с `Cache-Control: no-store`; клиент вызывает `fetch` с `cache: "no-store"`.
+- Проверка свежести: в выводе `npm run build` маршрут `/api/bookings` помечен как динамический (ƒ), не статический.
+- Тесты: сервис + вызов handlers через `new Request` — 400, 422, 409, 404, исключение текущей брони, форсированный конфликт
+  только при включённом env.
+- Проверка: `npm test -- src/server src/app/api && npm run typecheck`
+
+**3B-1. UI: данные и список** (implementer, ветка `feat/ui`, только через `src/lib/api`)
+- Файлы: `src/features/booking/hooks/useBookings.ts` (AbortController, `reload`, без сброса данных при обновлении),
+  `hooks/useNow.ts` (только на клиенте, тик раз в минуту), `components/DatePicker.tsx` (нативный `input[type=date]`),
+  `components/BookingList.tsx` (брони + метки «прошла» / «идёт»), `components/StatusBanner.tsx`,
+  `BookingPage.tsx`, `src/app/page.tsx`, тесты рядом.
+- Состояния: loading (skeleton), empty, error + «Повторить», refreshing.
+- Тесты: loading / empty / error / retry; ответ на старую дату не перезаписывает новую.
+- Проверка: `npm test -- src/features && npm run typecheck && npm run lint`
+
+**3B-2. UI: форма и ошибки сервера** (implementer, ветка `feat/ui`, после 3B-1)
+- Файлы: `components/BookingForm.tsx`, `components/TimeSlotPicker.tsx` (выбор времени внутри формы, на базе
+  `getSlotAvailability`; недоступные слоты — `aria-disabled` + причина через `aria-describedby`, остаются фокусируемыми),
+  `components/DeleteConfirm.tsx`, `components/DevConflictToggle.tsx` (подпись «Инструмент разработчика»),
+  правки `BookingPage.tsx`, тесты рядом.
+- Форма: локальное состояние, ошибки по полям из `messages.ts`, submitting (disabled + `aria-busy`).
+- 409: форма остаётся открытой, значения сохранены, баннер с конфликтующими бронями, `reload` списка, фокус на баннер.
+- 404 при PATCH/DELETE: сообщение + `reload`, форма закрывается.
+- A11y: `label` у полей, `aria-live` для статусов, видимый focus, управление с клавиатуры; вёрстка от 360px.
+- Тесты: `ConflictError` не теряет ввод и вызывает `reload`; 404; недоступные слоты при подставном `now`.
+- Проверка: `npm test -- src/features && npm run typecheck && npm run lint`
+
+## Фаза 4. Интеграция (основная сессия)
+- Слить `feat/server` и `feat/ui` в `main`.
+- Файлы: `docs/manual-qa.md` — чек-лист: создать; касание границ; пересечение; 409 через флаг;
+  редактирование идущей брони; удаление; прошедшая дата; 404 после удаления в другой вкладке; смена даты во время загрузки;
+  мобильная ширина и клавиатура.
+- Ручной прогон по чек-листу на `npm run dev`.
+- Готово: `npm run typecheck && npm run lint && npm test && npm run build` зелёные, чек-лист пройден.
+
+## Фаза 5. Ревью (reviewer, opus, чистый контекст, один раз)
+- Вход: `git diff <коммит фазы 0>..HEAD`, `SPEC.md`, `PLAN.md`.
+- Фокус: расхождения с ТЗ, дублирование правил, `fetch` в UI, потеря ввода, a11y, гонки.
+- Исправления — implementer по списку находок, затем общая проверка.
+
+## Фаза 6. README и деплой
+- Файлы: `README.md` — запуск, архитектура, решения и допущения (включая идущие брони, отказ от zod/TanStack Query,
+  лимиты агентов только в промпте), ограничение in-memory на serverless, как показать 409, что бы сделал дальше.
+- Vercel: env `NEXT_PUBLIC_DEV_TOOLS=1`, `MOCK_ALLOW_FORCED_CONFLICT=1`; проверить прод-сборку.
+- Готово: деплой открывается, сценарии `docs/manual-qa.md` проходят на проде (с поправкой на in-memory).
+
+## Фаза 7 (опционально). Redis
+- Файлы: `src/server/redis-repository.ts` (атомарность через Lua `EVAL`), выбор репозитория по env, README.
+- Готово: бронь с одного устройства видна на другом.
+
+---
+
+## Агенты (`.claude/agents`)
+| Агент | Модель | Инструменты | Назначение | Лимит отчёта |
+|---|---|---|---|---|
+| planner | opus | Read, Grep, Glob | Декомпозиция фазы, уточнение контракта; кода не пишет | ≤ 60 строк |
+| implementer | sonnet | Read, Edit, Write, Grep, Glob, Bash | Реализация строго в перечисленных файлах | ≤ 25 строк |
+| test-writer | sonnet | Read, Edit, Write, Grep, Glob, Bash | Тесты по SPEC/контракту; правит только `*.test.*` | ≤ 20 строк |
+| scout | haiku | Read, Grep, Glob | Поиск по коду | ≤ 15 строк, только `file:line` |
+| reviewer | opus | Read, Grep, Glob, Bash (только чтение) | Ревью в чистом контексте | ≤ 10 находок |
+
+- Лимиты отчёта и ограничения Bash для отдельного агента — инструкции в промпте, а не техническое ограничение.
+  Технически задаются только `model` и `tools`; разрешения команд — общие, в `.claude/settings.json`.
+- В каждом задании: список файлов, критерий готовности, команда проверки.
+- Параллельно не больше 2 агентов, каждый в своём worktree. Фазы 0–2 строго последовательны.
+- Коммитит только основная сессия.
