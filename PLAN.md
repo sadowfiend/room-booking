@@ -241,7 +241,8 @@
 - `<select>`: первая опция «Выберите время»; недоступные — «HH:MM — прошло / занято / …» с `disabled`;
   подсказка в `aria-describedby`; `aria-invalid` сохраняется.
 - Подтверждение удаления — `role=group` (не `<dialog>` / `alertdialog`), с текстом интервала.
-- Переключатель разработчика — чекбокс с прежней подписью, скрыт без env.
+- Переключатель разработчика — чекбокс с подписью «Инструмент разработчика: следующее сохранение вернёт 409»
+  (меняется в этапе 1, дальше не меняется), скрыт без env.
 
 **Этап 1. Оформление** (коммит `feat(ui): design tokens, cards, skeleton and empty state`)
 - Файлы: `src/app/globals.css` — семантические переменные (`--surface`, `--surface-muted`, `--border`, `--text`,
@@ -252,10 +253,23 @@
   `components/BookingList.tsx` (карточки: цветная полоса статуса, плашки «идёт» / «прошла», кнопки с иконкой и текстом),
   `BookingPage.tsx` (оболочка, скелетон в форме карточек с `motion-safe:animate-pulse`, пустое состояние с иллюстрацией),
   `components/BookingForm.tsx`, `components/TimeSlotPicker.tsx`, `components/StatusBanner.tsx`,
-  `components/DeleteConfirm.tsx`, `components/DevConflictToggle.tsx` — только классы.
+  `components/DeleteConfirm.tsx` — только классы; `components/DevConflictToggle.tsx` и
+  `components/DevConflictToggle.test.tsx` — классы и новая подпись «Инструмент разработчика: следующее сохранение
+  вернёт 409» (в `BookingForm.test.tsx` обновить только константу подписи).
 - Правила: в `src/features` нет «сырых» палитр (`zinc-`, `blue-`, `red-` …) — только токены; статус не передаётся
   только цветом; контраст текста ≥ 4.5:1, границ и фокуса ≥ 3:1 в обеих темах; видимый `focus-visible`.
   DOM-структура, роли, имена и тексты из чек-листа не меняются.
+- **Мобильный нативный вид** (те же файлы, только классы и CSS):
+  - `font-size` ≥ 16px у `input`, `select`, `textarea` (без автозума iOS); зоны нажатия ≥ 44×44px.
+  - `layout.tsx`: `export const viewport` с `viewportFit: "cover"` и `themeColor` (светлая и тёмная схема);
+    отступы оболочки с `env(safe-area-inset-*)`.
+  - «Новая бронь» на ширине < 640px закреплена внизу экрана (`sticky`, отступ с `safe-area-inset-bottom`).
+  - Форма на ширине < 640px оформлена как нижняя шторка (`position: fixed`, высота в `dvh`, скругление сверху)
+    **без** `role=dialog` и **без** focus trap: роли, имена и порядок фокуса из чек-листа не меняются.
+  - Hover-стили только внутри `@media (hover: hover)` (в Tailwind v4 — вариант `hover:` по умолчанию);
+    на touch — `:active`-состояния.
+  - Ручная проверка: ширины 360, 390, 768, 1280; масштаб 200% — без горизонтального скролла, шторка
+    и закреплённая кнопка не перекрывают поля и кнопки формы.
 - Тесты (test-writer): иллюстрация пустого состояния `aria-hidden` и без `role`; скелетон — единственный `aria-busy="true"`
   и не анимируется при `prefers-reduced-motion` (класс `motion-safe:`); `html[lang="ru"]` не проверять (layout вне jsdom).
 - Проверка: `npm run typecheck && npm run lint && npm test && npm run build`.
