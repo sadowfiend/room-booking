@@ -1,4 +1,4 @@
-import { getBookingService } from "@/server/booking-service";
+import { getBookingService } from "@/server/repository-factory";
 import {
   getRequestContext,
   noContentResponse,

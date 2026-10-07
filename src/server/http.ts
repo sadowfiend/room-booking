@@ -48,6 +48,8 @@ export function toResponse<T>(
 
 export const listResponse = (bookings: Booking[]): Response =>
   json({ bookings } satisfies ListBookingsResponse, 200);
+export const healthResponse = (storage: "memory" | "redis"): Response =>
+  json({ ok: true, storage }, 200);
 export const createdResponse = (booking: Booking): Response => json(booking, 201);
 export const okResponse = (booking: Booking): Response => json(booking, 200);
 export const noContentResponse = (): Response =>

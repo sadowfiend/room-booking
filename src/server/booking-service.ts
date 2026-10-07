@@ -7,7 +7,6 @@ import type {
   BookingInput,
   ValidationIssue,
 } from "@/domain/booking/types";
-import { getMemoryRepository } from "./memory-repository";
 import type { BookingRepository } from "./repository";
 
 export type ServiceError =
@@ -121,11 +120,4 @@ export function createBookingService(
       return removed ? { ok: true, value: null } : fail({ code: "NOT_FOUND" });
     },
   };
-}
-
-/** Service wired to the in-memory repository singleton. */
-let defaultService: BookingService | undefined;
-export function getBookingService(): BookingService {
-  defaultService ??= createBookingService(getMemoryRepository());
-  return defaultService;
 }
