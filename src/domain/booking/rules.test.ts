@@ -36,11 +36,14 @@ describe("validateBooking: working hours", () => {
 });
 
 describe("validateBooking: step", () => {
-  it("accepts multiples of 30", () => {
+  it("accepts multiples of 15 (:15 and :45 are on-step)", () => {
     expect(codes(inp("10:30", "11:30"))).toEqual([]);
+    expect(codes(inp("10:15", "11:00"))).toEqual([]);
+    expect(codes(inp("10:00", "10:45"))).toEqual([]);
+    expect(codes(inp("10:45", "11:45"))).toEqual([]);
   });
   it("rejects off-step start and end", () => {
-    expect(codes(inp("10:15", "11:00"))).toContain("OFF_STEP");
+    expect(codes(inp("10:10", "11:00"))).toContain("OFF_STEP");
     expect(codes(inp("10:00", "11:10"))).toContain("OFF_STEP");
   });
 });
@@ -64,8 +67,15 @@ describe("validateBooking: order and duration", () => {
   it("120 minutes is valid", () => {
     expect(codes(inp("10:00", "12:00"))).toEqual([]);
   });
+  it("45 minutes is valid", () => {
+    expect(codes(inp("10:00", "10:45"))).toEqual([]);
+  });
   it("29 minutes -> exactly OFF_STEP on end, no TOO_SHORT", () => {
     const issues = validateBooking(inp("10:00", "10:29"), { now: NOW });
+    expect(issues).toEqual([{ field: "end", code: "OFF_STEP" }]);
+  });
+  it("40 minutes -> exactly OFF_STEP on end, no TOO_SHORT", () => {
+    const issues = validateBooking(inp("10:00", "10:40"), { now: NOW });
     expect(issues).toEqual([{ field: "end", code: "OFF_STEP" }]);
   });
   it("121 minutes -> exactly OFF_STEP, no TOO_LONG", () => {
@@ -73,7 +83,7 @@ describe("validateBooking: order and duration", () => {
     expect(issues.map((i) => i.code)).toEqual(["OFF_STEP"]);
   });
   it("off-step start alone -> OFF_STEP on start, no duration code", () => {
-    const issues = validateBooking(inp("10:15", "11:00"), { now: NOW });
+    const issues = validateBooking(inp("10:10", "11:00"), { now: NOW });
     expect(issues).toEqual([{ field: "start", code: "OFF_STEP" }]);
   });
   it("150 minutes is too long", () => {

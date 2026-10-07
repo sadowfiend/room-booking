@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ROOM_TIME_ZONE, resolveRoomTimeZone } from "./config";
+import {
+  DEFAULT_ROOM_TIME_ZONE,
+  resolveRoomTimeZone,
+  SLOT_STEP_MINUTES,
+  WORKDAY_END,
+  WORKDAY_START,
+} from "./config";
 import {
   fromMinutes,
   generateTimeSlots,
@@ -55,12 +61,17 @@ describe("toMinutes / fromMinutes", () => {
 });
 
 describe("generateTimeSlots", () => {
-  it("has 19 slots from 09:00 to 18:00 in 30 min steps", () => {
+  it("has 37 slots from 09:00 to 18:00 in 15 min steps", () => {
     const slots = generateTimeSlots();
-    expect(slots).toHaveLength(19);
+    expect(slots).toHaveLength(37);
     expect(slots[0]).toBe("09:00");
-    expect(slots[1]).toBe("09:30");
-    expect(slots[18]).toBe("18:00");
+    expect(slots[1]).toBe("09:15");
+    expect(slots[36]).toBe("18:00");
+    const span = toMinutes(WORKDAY_END) - toMinutes(WORKDAY_START);
+    expect(slots).toHaveLength(span / SLOT_STEP_MINUTES + 1);
+    slots.forEach((s, i) => {
+      expect(toMinutes(s)).toBe(toMinutes(WORKDAY_START) + i * SLOT_STEP_MINUTES);
+    });
   });
 });
 
