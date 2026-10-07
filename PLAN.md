@@ -10,8 +10,10 @@
 - Прошедшие брони (`end <= now`) — только просмотр. Идущие — редактирование и удаление разрешены:
   `start` можно оставить исходным, новый `start >= now`, `end > now`.
 - PATCH принимает полное тело `{ date, start, end, title? }` (как PUT), без слияния с исходной бронью.
-- Хранилище: in-memory за `BookingRepository`. Redis — опциональная фаза 7.
-- Новых зависимостей нет: ни zod, ни TanStack Query (обоснование — в README).
+- Хранилище: асинхронный `BookingRepository`; Redis (задача 3C) при заданном env, иначе in-memory.
+  Заказчик проверяет с нескольких устройств, поэтому на деплое нужен Redis.
+- Новых зависимостей нет: ни zod, ни TanStack Query (обоснование — в README). Исключение — клиент Redis в 3C,
+  только с явного разрешения.
 - Демонстрация 409: заголовок `x-mock-force-conflict` принимается сервером только при `MOCK_ALLOW_FORCED_CONFLICT=1`;
   переключатель в UI с подписью «Инструмент разработчика» виден только при `NEXT_PUBLIC_DEV_TOOLS=1`.
 
@@ -111,14 +113,33 @@
 - Коммит — точка ветвления для фазы 3.
 
 ## Фаза 3. Сервер и UI
-Параллельно только 3A и 3B-1, каждый в своём worktree. 3B-2 стартует после завершения 3B-1, в той же ветке `feat/ui`.
+Параллельно только ветки `feat/server` (3A → 3C) и `feat/ui` (3B-1 → 3B-2), каждая в своём worktree.
+3C стартует после 3A в той же ветке, 3B-2 — после 3B-1.
 
 **3A. Сервер** (implementer, ветка `feat/server`)
 - Файлы: `src/server/repository.ts` (интерфейс), `src/server/memory-repository.ts` (синглтон на `globalThis`),
-  `src/server/booking-service.ts` (parse → validate → синхронные check+write, 404, форсированный конфликт),
+  `src/server/booking-service.ts` (parse → validate → атомарный check+write в репозитории, 404, форсированный конфликт),
   `src/server/http.ts` (ошибки сервиса → `Response`), `src/app/api/bookings/route.ts` (GET, POST),
   `src/app/api/bookings/[id]/route.ts` (PATCH, DELETE), `src/server/*.test.ts`.
 - Инвариант: сервис всегда вызывает `parseBookingInput` до `validateBooking` (домен не проверяет формат повторно).
+- `BookingRepository` асинхронный с первого дня (все методы возвращают `Promise`), чтобы Redis в 3C встал без правки сервиса.
+  Проверка пересечений и запись — одна атомарная операция репозитория, конфликт он ищет доменным `findConflicts`:
+  ```ts
+  type WriteResult =
+    | { ok: true; booking: Booking }
+    | { ok: false; reason: "conflict"; conflicts: Booking[] }
+    | { ok: false; reason: "not_found" };
+  interface BookingRepository {
+    readonly kind: "memory" | "redis";
+    listByDate(date: DateString): Promise<Booking[]>;   // отсортировано по start
+    getById(id: string): Promise<Booking | null>;
+    create(input: BookingInput): Promise<WriteResult>;  // findConflicts + вставка, атомарно
+    update(id: string, input: BookingInput): Promise<WriteResult>; // findConflicts(excludeId = id) + замена, атомарно
+    remove(id: string): Promise<boolean>;               // false → 404
+  }
+  ```
+  Сервис для PATCH: `getById` (404) → `validateBooking(input, { now, original })` → `repo.update`.
+  In-memory: внутри `create`/`update` между чтением и записью нет `await`, поэтому операция атомарна в пределах процесса.
 - Правила: handlers не длиннее ~20 строк; `params` в Next 16 — Promise; без `export const dynamic` (включён `cacheComponents`).
 - Свежесть GET: первой строкой `await connection()` (из `next/server`), явно отключает пререндер;
   все ответы API с `Cache-Control: no-store`; клиент вызывает `fetch` с `cache: "no-store"`.
@@ -126,6 +147,31 @@
 - Тесты: сервис + вызов handlers через `new Request` — 400, 422, 409, 404, исключение текущей брони, форсированный конфликт
   только при включённом env.
 - Проверка: `npm test -- src/server src/app/api && npm run typecheck`
+
+**3C. Redis** (implementer → test-writer, ветка `feat/server`, после 3A)
+- Файлы: `src/server/redis-repository.ts`, `src/server/redis-scripts.ts` (Lua), `src/server/repository-factory.ts`
+  (выбор по env), `src/app/api/health/route.ts`, `src/server/*.test.ts`, `.env.example`, `package.json`.
+- Зависимость: `@upstash/redis` (HTTP-клиент, работает в serverless на Vercel без пула соединений). Это обычная,
+  а не dev-зависимость: код выполняется в проде. Добавляется только с явного разрешения.
+- Схема данных: `booking:{id}` → JSON брони; `bookings:{date}` → hash `id → JSON`; `bookings:{date}:ver` → счётчик версии.
+- Атомарность — оптимистическая блокировка через Lua `EVAL` (рекомендуемый вариант):
+  1. прочитать `bookings:{date}` и `ver`; 2. в TS вызвать доменный `findConflicts`; 3. `EVAL`-скрипт записывает,
+  только если `ver` не изменился (сравнение + `HSET` + `INCR` в одном скрипте), иначе возвращает 0 → повтор (до 3 раз,
+  затем 409 с актуальными конфликтами). Перенос на другую дату проверяет и увеличивает версии обеих дат в одном скрипте.
+  - Почему не проверка пересечений целиком в Lua: правило 5 пришлось бы дублировать на Lua, а это нарушает
+    «правила не дублировать». Скрипт сравнивает только версии.
+  - Почему не блокировка на дату (`SET lock NX PX`): нужен TTL и обработка «протухшего» замка; при падении функции
+    дата блокируется до истечения TTL. CAS по версии не держит замков и не зависает.
+  - Почему не `WATCH/MULTI`: HTTP-клиент Upstash не держит соединение, `WATCH` через него не работает.
+- Выбор хранилища: `UPSTASH_REDIS_REST_URL` и `UPSTASH_REDIS_REST_TOKEN` заданы → Redis, иначе in-memory
+  и одно предупреждение в лог сервера. Без env поведение как в 3A; ограничение записывается в README.
+- Индикатор: `GET /api/health` → `{ ok: true, storage: "redis" | "memory" }` (`Cache-Control: no-store`).
+  Контракт броней не меняется; проверяется `curl` на деплое.
+- Тесты: один набор контрактных тестов `BookingRepository`, который прогоняется на памяти всегда, а на Redis — только
+  при `REDIS_TEST=1` (иначе `skip`); тест гонки: 10 параллельных `create` на пересекающийся слот → ровно один успех,
+  остальные `conflict`; повтор при несовпадении версии (подставной клиент); выбор репозитория по env; `/api/health`.
+- Проверка: `npm test -- src/server src/app/api && npm run typecheck && npm run lint`.
+- Готово: на деплое с env бронь, созданная на одном устройстве, видна на другом; `/api/health` показывает `redis`.
 
 **3B-1. UI: данные и список** (implementer, ветка `feat/ui`, только через `src/lib/api`)
 - Файлы: `src/features/booking/hooks/useBookings.ts` (AbortController, `reload`, без сброса данных при обновлении),
@@ -138,11 +184,14 @@
 
 **3B-2. UI: форма и ошибки сервера** (implementer, ветка `feat/ui`, после 3B-1)
 - Файлы: `components/BookingForm.tsx`, `components/TimeSlotPicker.tsx` (выбор времени внутри формы, на базе
-  `getSlotAvailability`; недоступные слоты — `aria-disabled` + причина через `aria-describedby`, остаются фокусируемыми),
+  `getSlotAvailability`),
   `components/DeleteConfirm.tsx`, `components/DevConflictToggle.tsx` (подпись «Инструмент разработчика»),
   правки `BookingPage.tsx`, тесты рядом.
 - Сетка `generateTimeSlots()` из 37 слотов включает 18:00. Списки в форме строить с фильтром:
   `start` не может быть 18:00, `end` не может быть 09:00.
+- Выбор времени — два нативных `<select>` (start и end), не сетка кнопок: при шаге 15 мин в каждом по 36 значений.
+  Недоступные варианты — `<option disabled>` с причиной в тексте («10:15 — занято», «09:30 — прошло», тексты из
+  `messages.ts`); общая подсказка у `select` через `aria-describedby`. Варианты `end` пересчитываются при смене `start`.
 - Форма: локальное состояние, ошибки по полям из `messages.ts`, submitting (disabled + `aria-busy`).
 - 409: форма остаётся открытой, значения сохранены, баннер с конфликтующими бронями, `reload` списка, фокус на баннер.
 - 404 при PATCH/DELETE: сообщение + `reload`, форма закрывается.
@@ -151,9 +200,9 @@
 - Проверка: `npm test -- src/features && npm run typecheck && npm run lint`
 
 ## Фаза 4. Интеграция (основная сессия)
-- Слить `feat/server` и `feat/ui` в `main`.
+- Слить `feat/server` (3A + 3C) и `feat/ui` в `main`.
 - Файлы: `docs/manual-qa.md` — чек-лист: создать; касание границ; пересечение; 409 через флаг;
-  редактирование идущей брони; удаление; прошедшая дата; 404 после удаления в другой вкладке; смена даты во время загрузки;
+  редактирование идущей брони; удаление; прошедшая дата; 404 после удаления в другой вкладке; бронь видна со второго устройства (Redis); смена даты во время загрузки;
   мобильная ширина и клавиатура.
 - Ручной прогон по чек-листу на `npm run dev`.
 - Готово: `npm run typecheck && npm run lint && npm test && npm run build` зелёные, чек-лист пройден.
@@ -165,13 +214,10 @@
 
 ## Фаза 6. README и деплой
 - Файлы: `README.md` — запуск, архитектура, решения и допущения (включая идущие брони, отказ от zod/TanStack Query,
-  лимиты агентов только в промпте), ограничение in-memory на serverless, как показать 409, что бы сделал дальше.
-- Vercel: env `NEXT_PUBLIC_DEV_TOOLS=1`, `MOCK_ALLOW_FORCED_CONFLICT=1`; проверить прод-сборку.
-- Готово: деплой открывается, сценарии `docs/manual-qa.md` проходят на проде (с поправкой на in-memory).
-
-## Фаза 7 (опционально). Redis
-- Файлы: `src/server/redis-repository.ts` (атомарность через Lua `EVAL`), выбор репозитория по env, README.
-- Готово: бронь с одного устройства видна на другом.
+  лимиты агентов только в промпте), хранилище (Redis на деплое, in-memory без env и его ограничение на serverless), как показать 409, что бы сделал дальше.
+- Vercel: env `NEXT_PUBLIC_DEV_TOOLS=1`, `MOCK_ALLOW_FORCED_CONFLICT=1`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+  (интеграция Upstash в Vercel Marketplace); проверить прод-сборку и `/api/health` → `redis`.
+- Готово: деплой открывается, сценарии `docs/manual-qa.md` проходят на проде, включая проверку со второго устройства.
 
 ---
 
