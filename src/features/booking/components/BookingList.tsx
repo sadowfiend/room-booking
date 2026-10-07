@@ -1,5 +1,6 @@
 import { toMinutes } from "@/domain/booking/time";
 import type { Booking, DateString, ZonedNow } from "@/domain/booking/types";
+import { PencilIcon, TrashIcon } from "./icons";
 
 type Props = {
   bookings: Booking[];
@@ -28,27 +29,39 @@ const STATUS_LABEL: Record<Exclude<Status, null>, string> = {
   ongoing: "идёт",
 };
 
+const STRIPE_CLASS: Record<"past" | "ongoing" | "upcoming", string> = {
+  past: "bg-past",
+  ongoing: "bg-ongoing",
+  upcoming: "bg-busy",
+};
+
 const actionClass =
-  "rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600";
+  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 font-medium text-text hover:bg-surface-muted active:scale-[0.98] active:bg-surface-muted disabled:opacity-60 text-sm";
 
 export function BookingList({ bookings, date, now, onEdit, onDelete }: Props) {
   const sorted = [...bookings].sort(
     (a, b) => toMinutes(a.start) - toMinutes(b.start),
   );
   return (
-    <ul className="flex flex-col gap-2" aria-label="Бронирования на выбранную дату">
+    <ul className="flex flex-col gap-3" aria-label="Бронирования на выбранную дату">
       {sorted.map((b) => {
         const status = getStatus(b, date, now);
         return (
           <li
             key={b.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 bg-white px-4 py-3"
+            className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-xl border border-border bg-surface py-3 pr-4 pl-5"
           >
+            <span
+              aria-hidden="true"
+              className={`absolute inset-y-0 left-0 w-1.5 ${STRIPE_CLASS[status ?? "upcoming"]}`}
+            />
             <div className="min-w-0">
-              <p className="break-words font-medium text-zinc-900">
+              <p
+                className={`break-words font-medium ${status === "past" ? "text-muted" : "text-text"}`}
+              >
                 {b.title?.trim() || "Без названия"}
               </p>
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-muted">
                 <time>{b.start}</time>
                 {" – "}
                 <time>{b.end}</time>
@@ -57,10 +70,10 @@ export function BookingList({ bookings, date, now, onEdit, onDelete }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               {status ? (
                 <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
                     status === "ongoing"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-zinc-100 text-zinc-600"
+                      ? "border-ongoing bg-surface-muted text-ongoing"
+                      : "border-border bg-surface-muted text-muted"
                   }`}
                 >
                   {STATUS_LABEL[status]}
@@ -73,6 +86,7 @@ export function BookingList({ bookings, date, now, onEdit, onDelete }: Props) {
                   aria-label={`Изменить бронь ${b.start}–${b.end}`}
                   className={actionClass}
                 >
+                  <PencilIcon />
                   Изменить
                 </button>
               ) : null}
@@ -83,6 +97,7 @@ export function BookingList({ bookings, date, now, onEdit, onDelete }: Props) {
                   aria-label={`Удалить бронь ${b.start}–${b.end}`}
                   className={actionClass}
                 >
+                  <TrashIcon />
                   Удалить
                 </button>
               ) : null}

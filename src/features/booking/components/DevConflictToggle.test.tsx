@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DevConflictToggle } from "./DevConflictToggle";
 
-const LABEL = "Инструмент разработчика: принудительный конфликт";
+const LABEL = "Инструмент разработчика: следующее сохранение вернёт 409";
 
 afterEach(() => vi.unstubAllEnvs());
 

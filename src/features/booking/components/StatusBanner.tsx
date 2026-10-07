@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from "react";
+import { AlertIcon, InfoIcon } from "./icons";
 
 type Props = {
   variant: "error" | "info";
@@ -26,21 +27,28 @@ export function StatusBanner({
       tabIndex={-1}
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
-      className={`flex flex-col gap-3 rounded-md border px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:flex-row sm:items-center sm:justify-between ${
+      className={`flex flex-col gap-3 rounded-xl border px-4 py-3 text-sm text-text sm:flex-row sm:items-center sm:justify-between ${
         isError
-          ? "border-red-300 bg-red-50 text-red-900"
-          : "border-blue-200 bg-blue-50 text-blue-900"
+          ? "border-danger bg-danger-soft"
+          : "border-accent bg-accent-soft"
       }`}
     >
-      <div className="flex flex-col gap-2">
-        <p>{message}</p>
-        {children}
+      <div className="flex items-start gap-3">
+        {isError ? (
+          <AlertIcon className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+        ) : (
+          <InfoIcon className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
+        )}
+        <div className="flex min-w-0 flex-col gap-2">
+          <p>{message}</p>
+          {children}
+        </div>
       </div>
       {actionLabel && onAction ? (
         <button
           type="button"
           onClick={onAction}
-          className="self-start rounded-md border border-current px-3 py-1.5 font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:self-auto"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center self-start rounded-lg border border-current px-4 font-medium active:scale-[0.98] active:opacity-80 sm:self-auto"
         >
           {actionLabel}
         </button>

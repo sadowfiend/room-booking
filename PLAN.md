@@ -263,13 +263,15 @@
   - `font-size` ≥ 16px у `input`, `select`, `textarea` (без автозума iOS); зоны нажатия ≥ 44×44px.
   - `layout.tsx`: `export const viewport` с `viewportFit: "cover"` и `themeColor` (светлая и тёмная схема);
     отступы оболочки с `env(safe-area-inset-*)`.
-  - «Новая бронь» на ширине < 640px закреплена внизу экрана (`sticky`, отступ с `safe-area-inset-bottom`).
+  - «Новая бронь» на ширине < 640px закреплена внизу экрана (`fixed` (с нижним padding у `<main>` и safe-area), отступ с `safe-area-inset-bottom`).
   - Форма на ширине < 640px оформлена как нижняя шторка (`position: fixed`, высота в `dvh`, скругление сверху)
     **без** `role=dialog` и **без** focus trap: роли, имена и порядок фокуса из чек-листа не меняются.
   - Hover-стили только внутри `@media (hover: hover)` (в Tailwind v4 — вариант `hover:` по умолчанию);
     на touch — `:active`-состояния.
   - Ручная проверка: ширины 360, 390, 768, 1280; масштаб 200% — без горизонтального скролла, шторка
     и закреплённая кнопка не перекрывают поля и кнопки формы.
+  - Статус проверки: контраст токенов оценён вручную (без инструмента); ширины 360/390/768/1280 и масштаб 200%
+    проверяет человек в браузере — пока не пройдено.
 - Тесты (test-writer): иллюстрация пустого состояния `aria-hidden` и без `role`; скелетон — единственный `aria-busy="true"`
   и не анимируется при `prefers-reduced-motion` (класс `motion-safe:`); `html[lang="ru"]` не проверять (layout вне jsdom).
 - Проверка: `npm run typecheck && npm run lint && npm test && npm run build`.

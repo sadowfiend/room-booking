@@ -10,7 +10,7 @@ export function DatePicker({ value, onChange }: Props) {
   const id = useId();
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium text-zinc-700">
+      <label htmlFor={id} className="text-sm font-medium text-muted">
         Дата
       </label>
       <input
@@ -21,7 +21,7 @@ export function DatePicker({ value, onChange }: Props) {
           // Empty value means the user cleared the field; keep the current date.
           if (e.target.value) onChange(e.target.value);
         }}
-        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:w-auto"
+        className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text sm:w-auto"
       />
     </div>
   );

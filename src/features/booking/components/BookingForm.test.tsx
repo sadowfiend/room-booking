@@ -324,7 +324,7 @@ describe("BookingForm server errors", () => {
 });
 
 describe("BookingForm dev conflict toggle", () => {
-  const LABEL = "Инструмент разработчика: принудительный конфликт";
+  const LABEL = "Инструмент разработчика: следующее сохранение вернёт 409";
 
   it("is hidden without NEXT_PUBLIC_DEV_TOOLS and forceConflict is falsy", async () => {
     vi.stubEnv("NEXT_PUBLIC_DEV_TOOLS", "");

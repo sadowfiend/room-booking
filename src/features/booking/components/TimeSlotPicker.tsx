@@ -32,7 +32,7 @@ type Props = {
 };
 
 const selectClass =
-  "w-full rounded-md border bg-white px-3 py-2 text-base text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-60";
+  "min-h-11 w-full rounded-lg border bg-surface px-3 py-2 text-base text-text disabled:opacity-60";
 
 export function TimeSlotPicker({
   date,
@@ -99,7 +99,7 @@ export function TimeSlotPicker({
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="flex flex-col gap-1">
-        <label htmlFor={startId} className="text-sm font-medium text-zinc-700">
+        <label htmlFor={startId} className="text-sm font-medium text-muted">
           Начало
         </label>
         <select
@@ -109,7 +109,7 @@ export function TimeSlotPicker({
           aria-invalid={startError ? true : undefined}
           aria-describedby={describedBy(startErrorId, startError)}
           onChange={(e) => onStartChange(e.target.value)}
-          className={`${selectClass} ${startError ? "border-red-500" : "border-zinc-300"}`}
+          className={`${selectClass} ${startError ? "border-danger" : "border-border"}`}
         >
           <option value="">Выберите время</option>
           {startPoints.map((t) => {
@@ -122,14 +122,14 @@ export function TimeSlotPicker({
           })}
         </select>
         {startError ? (
-          <p id={startErrorId} className="text-sm text-red-700">
+          <p id={startErrorId} className="text-sm text-danger">
             {startError}
           </p>
         ) : null}
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={endId} className="text-sm font-medium text-zinc-700">
+        <label htmlFor={endId} className="text-sm font-medium text-muted">
           Окончание
         </label>
         <select
@@ -139,7 +139,7 @@ export function TimeSlotPicker({
           aria-invalid={endError ? true : undefined}
           aria-describedby={describedBy(endErrorId, endError)}
           onChange={(e) => onEndChange(e.target.value)}
-          className={`${selectClass} ${endError ? "border-red-500" : "border-zinc-300"}`}
+          className={`${selectClass} ${endError ? "border-danger" : "border-border"}`}
         >
           <option value="">Выберите время</option>
           {endPoints.map((t) => {
@@ -152,13 +152,13 @@ export function TimeSlotPicker({
           })}
         </select>
         {endError ? (
-          <p id={endErrorId} className="text-sm text-red-700">
+          <p id={endErrorId} className="text-sm text-danger">
             {endError}
           </p>
         ) : null}
       </div>
 
-      <p id={hintId} className="text-xs text-zinc-600 sm:col-span-2">
+      <p id={hintId} className="text-xs text-muted sm:col-span-2">
         {TIME_HINT_MESSAGE}
       </p>
     </div>
