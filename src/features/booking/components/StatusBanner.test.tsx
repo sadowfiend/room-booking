@@ -23,7 +23,7 @@ describe("StatusBanner", () => {
 describe("DatePicker", () => {
   it("shows value and reports changes; ignores clearing", () => {
     const onChange = vi.fn();
-    render(<DatePicker value="2026-10-07" onChange={onChange} />);
+    render(<DatePicker value="2026-10-07" onChange={onChange} today={null} />);
     const input = screen.getByLabelText("Дата");
     expect(input).toHaveValue("2026-10-07");
     fireEvent.change(input, { target: { value: "2026-10-09" } });

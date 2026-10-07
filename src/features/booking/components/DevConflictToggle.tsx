@@ -8,15 +8,15 @@ type Props = {
 export function DevConflictToggle({ checked, onChange, disabled }: Props) {
   if (process.env.NEXT_PUBLIC_DEV_TOOLS !== "1") return null;
   return (
-    <label className="flex items-center gap-2 text-sm text-zinc-700">
+    <label className="flex min-h-11 items-center gap-3 text-sm text-muted">
       <input
         type="checkbox"
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+        className="h-5 w-5 accent-accent"
       />
-      Инструмент разработчика: принудительный конфликт
+      Инструмент разработчика: следующее сохранение вернёт 409
     </label>
   );
 }

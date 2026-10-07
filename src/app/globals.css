@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
+/*
+ * Semantic design tokens. Contrast (WCAG): text and text-muted >= 4.5:1 on
+ * surface and surface-muted; border, focus and status colors >= 3:1 against
+ * surface in both themes. Status is never conveyed by color alone.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  color-scheme: light dark;
+  --surface: #ffffff;
+  --surface-muted: #f3f4f6;
+  --border: #858a93; /* 3.6:1 on surface */
+  --text: #171a1f; /* 17:1 */
+  --text-muted: #4b5563; /* 7.6:1 */
+  --accent: #1d4ed8; /* 6.7:1 against on-accent */
+  --on-accent: #ffffff;
+  --accent-soft: #e8efff;
+  --busy: #2563eb; /* stripe of an upcoming booking, 5.2:1 */
+  --past: #5f6672; /* 5.9:1 */
+  --ongoing: #15803d; /* 5.0:1 */
+  --selected: #dbe7ff;
+  --danger: #b42318; /* 6.5:1 */
+  --danger-soft: #fdecea;
+  --focus: #1d4ed8; /* 6.7:1 */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --surface: #1c1c1e;
+    --surface-muted: #111113;
+    --border: #70757d; /* 3.6:1 on surface */
+    --text: #ededf0; /* 14:1 */
+    --text-muted: #a8adb7; /* 7.4:1 */
+    --accent: #8ab4ff; /* 9:1 against on-accent */
+    --on-accent: #0b1220;
+    --accent-soft: #172a4d;
+    --busy: #6ea0ff;
+    --past: #9aa0ab;
+    --ongoing: #4ade80;
+    --selected: #1e3a6e;
+    --danger: #ff8a80;
+    --danger-soft: #3a1613;
+    --focus: #8ab4ff;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-busy: var(--busy);
+  --color-past: var(--past);
+  --color-ongoing: var(--ongoing);
+  --color-selected: var(--selected);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-focus: var(--focus);
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--surface-muted);
+    color: var(--text);
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  /* >= 16px prevents iOS from zooming on focus. */
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+  }
 }

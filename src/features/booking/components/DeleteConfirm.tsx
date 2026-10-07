@@ -27,6 +27,21 @@ export function DeleteConfirm({
   const [error, setError] = useState<ApiError | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  // Remember the control that opened the confirmation, then move focus to "Отмена".
+  useEffect(() => {
+    const active = document.activeElement;
+    openerRef.current = active instanceof HTMLElement ? active : null;
+    cancelRef.current?.focus();
+  }, []);
+
+  function cancel() {
+    const opener = openerRef.current;
+    onCancel();
+    if (opener?.isConnected) opener.focus();
+  }
 
   useEffect(() => () => controllerRef.current?.abort(), []);
   useEffect(() => {
@@ -61,9 +76,15 @@ export function DeleteConfirm({
       role="group"
       aria-label="Подтверждение удаления"
       aria-busy={deleting}
-      className="flex flex-col gap-3 rounded-md border border-red-200 bg-red-50 p-4"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          cancel();
+        }
+      }}
+      className="flex flex-col gap-3 rounded-xl border border-danger bg-danger-soft p-4"
     >
-      <p className="text-sm text-zinc-900">
+      <p className="text-sm text-text">
         Удалить бронь «{name}» {booking.start}–{booking.end}?
       </p>
       {error ? (
@@ -73,19 +94,20 @@ export function DeleteConfirm({
           message={API_ERROR_MESSAGES[error.code]}
         />
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-3">
         <button
           type="button"
           onClick={confirm}
           disabled={deleting}
-          className="rounded-md bg-red-700 px-4 py-2 font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-60"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-danger px-5 font-medium text-on-accent hover:opacity-90 active:scale-[0.98] active:opacity-80 disabled:opacity-60"
         >
           {deleting ? "Удаление…" : "Удалить"}
         </button>
         <button
+          ref={cancelRef}
           type="button"
-          onClick={onCancel}
-          className="rounded-md border border-zinc-300 bg-white px-4 py-2 font-medium text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          onClick={cancel}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 font-medium text-text hover:bg-surface-muted active:scale-[0.98] active:bg-surface-muted disabled:opacity-60"
         >
           Отмена
         </button>

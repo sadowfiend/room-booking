@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { API_ERROR_MESSAGES } from "@/domain/booking/messages";
 import { VALIDATION_MESSAGES } from "@/domain/booking/messages";
 import type { Booking, DateString } from "@/domain/booking/types";
@@ -8,10 +8,12 @@ import { bookingsApi, type BookingsApi } from "@/lib/api/bookings";
 import { BookingForm } from "./components/BookingForm";
 import { BookingList } from "./components/BookingList";
 import { DatePicker } from "./components/DatePicker";
+import { DayStrip } from "./components/DayStrip";
 import { DeleteConfirm } from "./components/DeleteConfirm";
 import { StatusBanner } from "./components/StatusBanner";
 import { useBookings } from "./hooks/useBookings";
 import { useNow } from "./hooks/useNow";
+import { EmptyCalendarIllustration, PlusIcon } from "./components/icons";
 
 type Props = { api?: BookingsApi };
 
@@ -22,14 +24,20 @@ type Panel =
 
 type Notice = { variant: "info" | "error"; message: string };
 
-const addButtonClass =
-  "self-start rounded-md bg-blue-700 px-4 py-2 font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-60";
+const addButtonBase =
+  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 font-medium text-on-accent hover:opacity-90 active:scale-[0.98] active:opacity-80 disabled:opacity-60 shadow-sm";
+// On narrow screens the button stays in DOM order but is pinned to the bottom edge;
+// <main> reserves bottom padding so it never covers the last card.
+const addButtonClass = `${addButtonBase} self-start max-sm:fixed max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:left-[max(1rem,env(safe-area-inset-left))] max-sm:z-30`;
 
 function ListSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Загрузка бронирований" className="flex flex-col gap-2">
+    <div aria-busy="true" aria-label="Загрузка бронирований" className="flex flex-col gap-3">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-16 animate-pulse rounded-md bg-zinc-200" />
+        <div
+          key={i}
+          className="h-[4.5rem] rounded-xl border border-border bg-surface motion-safe:animate-pulse"
+        />
       ))}
     </div>
   );
@@ -43,9 +51,20 @@ export function BookingPage({ api = bookingsApi }: Props) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
+  const [conflictIds, setConflictIds] = useState<string[]>([]);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  // Set after a successful save/delete; consumed once the panel is closed and the button is rendered.
+  const focusAddPending = useRef(false);
+
+  // Conflict highlight lives only while the form that caused it is open.
+  const closePanel = () => {
+    setPanel(null);
+    setConflictIds([]);
+  };
+
   const changeDate = (next: DateString) => {
     setPicked(next);
-    setPanel(null);
+    closePanel();
     setNotice(null);
   };
 
@@ -54,13 +73,32 @@ export function BookingPage({ api = bookingsApi }: Props) {
     { api },
   );
 
+  useEffect(() => {
+    if (!focusAddPending.current || panel !== null) return;
+    const button = addButtonRef.current;
+    if (button && !button.disabled) {
+      button.focus();
+      focusAddPending.current = false;
+    }
+  }, [panel, bookings]);
+
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
-      <h1 className="text-2xl font-semibold text-zinc-900">
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 pt-[max(1.5rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(5.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] sm:py-8 sm:pb-8">
+      <h1 className="text-2xl font-semibold text-text">
         Бронирование переговорной
       </h1>
 
-      {date ? <DatePicker value={date} onChange={changeDate} /> : null}
+      {date ? (
+        <DatePicker
+          value={date}
+          onChange={changeDate}
+          today={now?.date ?? null}
+        />
+      ) : null}
+
+      {date && bookings ? (
+        <DayStrip bookings={bookings} date={date} now={now} />
+      ) : null}
 
       {notice ? (
         <StatusBanner variant={notice.variant} message={notice.message} />
@@ -80,23 +118,27 @@ export function BookingPage({ api = bookingsApi }: Props) {
           {panel === null ? (
             date < now.date ? (
               <div className="flex flex-col gap-1">
-                <button type="button" disabled className={addButtonClass}>
+                <button type="button" disabled className={addButtonBase}>
+                  <PlusIcon />
                   Новая бронь
                 </button>
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm text-muted">
                   {VALIDATION_MESSAGES.PAST_DATE}
                 </p>
               </div>
             ) : (
               <button
+                ref={addButtonRef}
                 type="button"
                 disabled={bookings === null}
                 onClick={() => {
                   setNotice(null);
+                  setConflictIds([]);
                   setPanel({ kind: "create" });
                 }}
                 className={addButtonClass}
               >
+                <PlusIcon />
                 Новая бронь
               </button>
             )
@@ -111,9 +153,11 @@ export function BookingPage({ api = bookingsApi }: Props) {
               now={now}
               original={panel.kind === "edit" ? panel.booking : undefined}
               reload={reload}
-              onCancel={() => setPanel(null)}
+              onCancel={closePanel}
+              onConflict={(c) => setConflictIds(c.map((b) => b.id))}
               onSaved={(_, mode) => {
-                setPanel(null);
+                focusAddPending.current = true;
+                closePanel();
                 setNotice({
                   variant: "info",
                   message: mode === "edit" ? "Бронь обновлена" : "Бронь создана",
@@ -121,7 +165,7 @@ export function BookingPage({ api = bookingsApi }: Props) {
                 reload();
               }}
               onNotFound={() => {
-                setPanel(null);
+                closePanel();
                 setNotice({
                   variant: "error",
                   message: API_ERROR_MESSAGES.NOT_FOUND,
@@ -135,14 +179,15 @@ export function BookingPage({ api = bookingsApi }: Props) {
               key={panel.booking.id}
               api={api}
               booking={panel.booking}
-              onCancel={() => setPanel(null)}
+              onCancel={closePanel}
               onDeleted={() => {
-                setPanel(null);
+                focusAddPending.current = true;
+                closePanel();
                 setNotice({ variant: "info", message: "Бронь удалена" });
                 reload();
               }}
               onNotFound={() => {
-                setPanel(null);
+                closePanel();
                 setNotice({
                   variant: "error",
                   message: API_ERROR_MESSAGES.NOT_FOUND,
@@ -156,7 +201,7 @@ export function BookingPage({ api = bookingsApi }: Props) {
 
       <section aria-label="Список бронирований" className="flex flex-col gap-3">
         {isRefreshing ? (
-          <p role="status" aria-live="polite" className="text-xs text-zinc-500">
+          <p role="status" aria-live="polite" className="text-xs text-muted">
             Обновление…
           </p>
         ) : null}
@@ -165,20 +210,26 @@ export function BookingPage({ api = bookingsApi }: Props) {
           <ListSkeleton />
         ) : bookings && date ? (
           bookings.length === 0 ? (
-            <p className="rounded-md border border-dashed border-zinc-300 px-4 py-6 text-center text-zinc-600">
-              На эту дату бронирований нет
-            </p>
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-surface px-4 py-8">
+              <EmptyCalendarIllustration />
+              <p className="text-center text-muted">
+                На эту дату бронирований нет
+              </p>
+            </div>
           ) : (
             <BookingList
               bookings={bookings}
               date={date}
               now={now}
+              highlightIds={conflictIds}
               onEdit={(b) => {
                 setNotice(null);
+                setConflictIds([]);
                 setPanel({ kind: "edit", booking: b });
               }}
               onDelete={(b) => {
                 setNotice(null);
+                setConflictIds([]);
                 setPanel({ kind: "delete", booking: b });
               }}
             />

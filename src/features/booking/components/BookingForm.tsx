@@ -41,6 +41,8 @@ type Props = {
   /** Refreshes the list (called after a 409). */
   reload: () => void;
   onCancel: () => void;
+  /** Called with the conflicting bookings on a 409, in addition to the banner. */
+  onConflict?: (conflicts: Booking[]) => void;
   onSaved: (booking: Booking, mode: "create" | "edit") => void;
   /** 404 on update: the booking no longer exists. */
   onNotFound: () => void;
@@ -60,6 +62,7 @@ export function BookingForm({
   original,
   reload,
   onCancel,
+  onConflict,
   onSaved,
   onNotFound,
 }: Props) {
@@ -143,6 +146,7 @@ export function BookingForm({
         onNotFound();
       } else if (err instanceof ConflictError) {
         setBanner({ code: "CONFLICT", conflicts: err.conflicts });
+        onConflict?.(err.conflicts);
         reload();
       } else if (err instanceof ValidationError) {
         setServerIssues(err.issues);
@@ -160,11 +164,11 @@ export function BookingForm({
       noValidate
       aria-busy={submitting}
       aria-label={mode === "edit" ? "Редактирование брони" : "Новая бронь"}
-      className="flex flex-col gap-4 rounded-md border border-zinc-200 bg-white p-4"
+      className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:max-h-[85dvh] max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0 max-sm:pt-5 max-sm:pr-[max(1rem,env(safe-area-inset-right))] max-sm:pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:pl-[max(1rem,env(safe-area-inset-left))] max-sm:shadow-[0_-8px_32px_rgb(0_0_0/0.3)]"
     >
-      <h2 className="text-lg font-semibold text-zinc-900">
+      <h2 className="text-lg font-semibold text-text">
         {mode === "edit" ? "Редактирование брони" : "Новая бронь"}
-        <span className="ml-2 text-sm font-normal text-zinc-600">{date}</span>
+        <span className="ml-2 text-sm font-normal text-muted">{date}</span>
       </h2>
 
       {banner ? (
@@ -184,7 +188,7 @@ export function BookingForm({
       ) : null}
 
       {formIssues.length > 0 ? (
-        <ul role="alert" className="list-disc pl-5 text-sm text-red-700">
+        <ul role="alert" className="list-disc pl-5 text-sm text-danger">
           {formIssues.map((i, idx) => (
             <li key={`${i.code}-${idx}`}>{VALIDATION_MESSAGES[i.code]}</li>
           ))}
@@ -213,7 +217,7 @@ export function BookingForm({
         />
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={titleId} className="text-sm font-medium text-zinc-700">
+          <label htmlFor={titleId} className="text-sm font-medium text-muted">
             Название (необязательно)
           </label>
           <input
@@ -226,10 +230,10 @@ export function BookingForm({
               setTitle(e.target.value);
               clearServerState();
             }}
-            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className={`min-h-11 w-full rounded-lg border bg-surface px-3 py-2 text-base text-text ${fieldError("title") ? "border-danger" : "border-border"}`}
           />
           {fieldError("title") ? (
-            <p id={titleErrorId} className="text-sm text-red-700">
+            <p id={titleErrorId} className="text-sm text-danger">
               {fieldError("title")}
             </p>
           ) : null}
@@ -238,18 +242,18 @@ export function BookingForm({
         <DevConflictToggle checked={forceConflict} onChange={setForceConflict} />
       </fieldset>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-3">
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-60"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 font-medium text-on-accent hover:opacity-90 active:scale-[0.98] active:opacity-80 disabled:opacity-60"
         >
           {submitting ? "Отправка…" : mode === "edit" ? "Сохранить" : "Забронировать"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-zinc-300 px-4 py-2 font-medium text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 font-medium text-text hover:bg-surface-muted active:scale-[0.98] active:bg-surface-muted disabled:opacity-60"
         >
           Отмена
         </button>

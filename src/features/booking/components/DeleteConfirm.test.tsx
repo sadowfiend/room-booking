@@ -86,3 +86,18 @@ describe("DeleteConfirm", () => {
     expect(onDeleted).not.toHaveBeenCalled();
   });
 });
+
+describe("DeleteConfirm focus and keyboard", () => {
+  it("focuses «Отмена» when opened", () => {
+    setup();
+    expect(screen.getByRole("button", { name: "Отмена" })).toHaveFocus();
+  });
+
+  it("Esc calls onCancel and does not delete", async () => {
+    const { api, onCancel, onDeleted } = setup();
+    await userEvent.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+});
