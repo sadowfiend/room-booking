@@ -36,7 +36,8 @@ export type ApiErrorCode =
   | "VALIDATION"
   | "CONFLICT"
   | "NOT_FOUND"
-  | "NETWORK";
+  | "NETWORK"
+  | "UNKNOWN";
 
 export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   BAD_REQUEST: "Некорректный запрос",
@@ -45,6 +46,7 @@ export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
     "Это время только что заняли. Список броней обновлён, введённые данные сохранены — выберите другое время",
   NOT_FOUND: "Бронь не найдена",
   NETWORK: "Нет соединения с сервером. Попробуйте ещё раз",
+  UNKNOWN: "Что-то пошло не так. Попробуйте ещё раз",
 };
 
 export const SLOT_BUSY_MESSAGE = "Это время занято";

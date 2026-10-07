@@ -101,6 +101,11 @@
 - Файлы: `src/lib/api/errors.ts` (`ApiError`, `BadRequestError`, `ValidationError`, `ConflictError`, `NotFoundError`, `NetworkError`),
   `src/lib/api/contract.ts` (типы тел ответов и ошибок), `src/lib/api/bookings.ts` (`list/create/update/remove`,
   `baseUrl`, `signal`, опция `forceConflict`), `src/lib/api/*.test.ts`.
+- Успешные ответы: `GET` 200 → `{ bookings: Booking[] }` (по `start`); `POST` 201 → `Booking`; `PATCH` 200 → `Booking`;
+  `DELETE` 204 без тела. Все запросы с `cache: "no-store"`; тело JSON с `Content-Type: application/json`.
+- Статус вне контракта (5xx и т.п.) или нечитаемый JSON → `ApiError` с кодом `UNKNOWN`; сбой `fetch` → `NetworkError`;
+  отмена через `signal` пробрасывается как `AbortError` (не `NetworkError`), чтобы хуки её игнорировали.
+- `contract.ts` — общий для клиента и сервера (3A импортирует оттуда типы тел и заголовок `x-mock-force-conflict`).
 - Готово: UI не видит `fetch` и HTTP-статусы; каждый статус соответствует своему классу ошибки.
 - Проверка: `npm test -- src/lib/api` (fetch замокан).
 - Коммит — точка ветвления для фазы 3.
