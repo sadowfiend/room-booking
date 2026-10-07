@@ -9,6 +9,7 @@
 - Интервалы полуоткрытые `[start, end)`: касание границ не конфликт.
 - Прошедшие брони (`end <= now`) — только просмотр. Идущие — редактирование и удаление разрешены:
   `start` можно оставить исходным, новый `start >= now`, `end > now`.
+- PATCH принимает полное тело `{ date, start, end, title? }` (как PUT), без слияния с исходной бронью.
 - Хранилище: in-memory за `BookingRepository`. Redis — опциональная фаза 7.
 - Новых зависимостей нет: ни zod, ни TanStack Query (обоснование — в README).
 - Демонстрация 409: заголовок `x-mock-force-conflict` принимается сервером только при `MOCK_ALLOW_FORCED_CONFLICT=1`;
@@ -36,7 +37,7 @@
   `npm run build` — в конце фаз 4 и 6.
 - Коммит после каждой фазы, только при зелёных проверках, после показа `git diff --stat`.
   Формат сообщения: `feat(domain): ...`, `feat(server): ...`, `chore(setup): ...` и т.п.
-- После каждой фазы — строка в `docs/ai-usage.md` (фаза, агент, модель, значение `/cost`, результат).
+- После каждой фазы — строка в `docs/ai-usage.md` (фаза, агент, модель, % лимита из `/usage`, результат).
 
 ---
 
@@ -56,25 +57,43 @@
 **1.1 Конфиг, типы, время**
 - Файлы: `src/domain/booking/config.ts`, `types.ts`, `time.ts`
 - `Booking`, `BookingInput`, `ValidationCode` (union); `toMinutes`/`fromMinutes`;
-  `getNowInZone(tz, instant)` → `{ date: YYYY-MM-DD, minutes }`; `generateSlots()`.
+  `getZonedNow(instant, tz)` → `{ date: YYYY-MM-DD, minutes }`; `generateTimeSlots()`.
 - Готово: все функции чистые, `now` передаётся параметром, `Date.now()` внутри домена не вызывается.
 
 **1.2 Правила**
-- Файлы: `src/domain/booking/rules.ts`, `parse.ts`, `availability.ts`, `messages.ts`
-- `validateBooking(input, { existing, now, original? })` → `ValidationIssue[]` (`{ field?, code }`).
-- `findConflicts(input, existing, excludeId?)`.
+- Файлы: `src/domain/booking/rules.ts`, `parse.ts`, `messages.ts`
+- `validateBooking(input, { now, original? })` → `ValidationIssue[]` (`{ field?, code }`):
+  правила 1–4, 6 и правило про идущие брони. Пересечения не проверяет.
+  Без двойных ошибок: время не по шагу (`OFF_STEP`) → длительность не проверяется;
+  `START_IN_PAST` → `END_IN_PAST` не добавляется.
+- `findConflicts(input, existing, excludeId?)` → `Booking[]`: правило 5 (полуоткрытые интервалы `[start, end)`)
+  и правило 7 (бронь с `id === excludeId` исключается при редактировании).
+- Порядок на сервере: сначала 422 (`validateBooking`), затем 409 (`findConflicts`).
+  Форма вызывает обе функции для подсказок; решающее слово за сервером.
 - `parseBookingInput(unknown)` → `Result<BookingInput, ValidationIssue[]>`.
-- `getSlotAvailability(date, { existing, now, original? })` → слоты начала/конца с причиной недоступности (`code`).
-  Используется формой, чтобы UI не реализовывал правила повторно.
 - `messages.ts`: код → русский текст. Единственное место с текстами ошибок.
 - Готово: правила 1–7 из SPEC и правило про идущие брони реализованы.
 
 **1.3 Тесты домена** (test-writer, по SPEC и контракту, не по реализации)
 - Файлы: `src/domain/booking/*.test.ts`; удалить `src/smoke.test.tsx`.
-- Обязательные случаи: 09:00/18:00 на границах; ровно 30 и 120 мин; 29/31 → не по шагу, 150 → больше максимума;
+- Обязательные случаи времени (из проверок 1.1): Бишкек — 18:00 UTC = следующая дата 00:00, 17:59 UTC = 23:59;
+  `2026-02-30` отклоняется, `2028-02-29` принимается; `generateTimeSlots()` даёт 19 слотов;
+  неверный TZ заменяется на `Asia/Bishkek`.
+- Обязательные случаи правил: 09:00/18:00 на границах; ровно 30 и 120 мин; 29/31 → не по шагу, 150 → больше максимума;
   касание 10–11 и 11–12; вложенный и перекрывающий интервал; исключение текущей брони при редактировании;
   прошедшая дата; сегодня `start == now` и `start < now`; идущая бронь (сохранить `start` / сдвинуть `start` в прошлое /
-  `end <= now`); мусор в `parseBookingInput`; `getSlotAvailability` с причинами.
+  `end <= now`); мусор в `parseBookingInput`.
+- Проверка: `npm test -- src/domain`
+
+**1.4 Доступность слотов** (implementer → test-writer)
+- Файлы: `src/domain/booking/availability.ts`, `messages.ts` (текст «занято»), `availability.test.ts`.
+- `getSlotAvailability(date, { existing, now, original? })` → `SlotAvailability[]` по 30-минутным ячейкам
+  `[t, t + 30)`, `t` = 09:00 … 17:30 (18 ячеек). Каждая ячейка: `available` | `past` (с `code`: `PAST_DATE` / `START_IN_PAST` / `BOOKING_FINISHED`)
+  | `busy` (с `conflicts: Booking[]`). Чистая функция, переиспользует `validateBooking` / `findConflicts`, правила не дублирует.
+- Приоритет: `past` важнее `busy`. Своя бронь при редактировании не занимает ячейки (`excludeId = original.id`);
+  у идущей `original` ячейка с исходным `start` не считается прошедшей.
+- Используется формой (3B-2) для `aria-disabled` и причины. Варианты `end` для выбранного `start` форма проверяет
+  через `validateBooking` + `findConflicts`, без своих правил.
 - Проверка: `npm test -- src/domain`
 
 ## Фаза 2. Контракт API (последовательно, implementer)
@@ -94,6 +113,7 @@
   `src/server/booking-service.ts` (parse → validate → синхронные check+write, 404, форсированный конфликт),
   `src/server/http.ts` (ошибки сервиса → `Response`), `src/app/api/bookings/route.ts` (GET, POST),
   `src/app/api/bookings/[id]/route.ts` (PATCH, DELETE), `src/server/*.test.ts`.
+- Инвариант: сервис всегда вызывает `parseBookingInput` до `validateBooking` (домен не проверяет формат повторно).
 - Правила: handlers не длиннее ~20 строк; `params` в Next 16 — Promise; без `export const dynamic` (включён `cacheComponents`).
 - Свежесть GET: первой строкой `await connection()` (из `next/server`), явно отключает пререндер;
   все ответы API с `Cache-Control: no-store`; клиент вызывает `fetch` с `cache: "no-store"`.
@@ -116,6 +136,8 @@
   `getSlotAvailability`; недоступные слоты — `aria-disabled` + причина через `aria-describedby`, остаются фокусируемыми),
   `components/DeleteConfirm.tsx`, `components/DevConflictToggle.tsx` (подпись «Инструмент разработчика»),
   правки `BookingPage.tsx`, тесты рядом.
+- Сетка `generateTimeSlots()` из 19 слотов включает 18:00. Списки в форме строить с фильтром:
+  `start` не может быть 18:00, `end` не может быть 09:00.
 - Форма: локальное состояние, ошибки по полям из `messages.ts`, submitting (disabled + `aria-busy`).
 - 409: форма остаётся открытой, значения сохранены, баннер с конфликтующими бронями, `reload` списка, фокус на баннер.
 - 404 при PATCH/DELETE: сообщение + `reload`, форма закрывается.
